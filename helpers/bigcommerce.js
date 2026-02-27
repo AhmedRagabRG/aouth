@@ -123,14 +123,21 @@ async function ensureLocationAttributes() {
 async function saveCustomerLocation(customerId, { latitude, longitude, building, floor }) {
     const attrs = await ensureLocationAttributes();
 
+    // BC requires customer_id and attribute_id to be integers — coerce explicitly
+    const cid = parseInt(customerId, 10);
+    console.log('[BC] attrMap:', JSON.stringify(attrs));
+    console.log('[BC] customerId (raw):', customerId, '| parsed:', cid);
+
     const values = [
-        { attribute_id: attrs['latitude'],        customer_id: customerId, attribute_value: String(latitude) },
-        { attribute_id: attrs['longitude'],       customer_id: customerId, attribute_value: String(longitude) },
-        { attribute_id: attrs['building_number'], customer_id: customerId, attribute_value: String(building) },
-        { attribute_id: attrs['floor_number'],    customer_id: customerId, attribute_value: String(floor) },
+        { attribute_id: parseInt(attrs['latitude'],        10), customer_id: cid, value: String(latitude) },
+        { attribute_id: parseInt(attrs['longitude'],       10), customer_id: cid, value: String(longitude) },
+        { attribute_id: parseInt(attrs['building_number'], 10), customer_id: cid, value: String(building) },
+        { attribute_id: parseInt(attrs['floor_number'],    10), customer_id: cid, value: String(floor) },
     ];
 
-    console.log('[BC] PUT attribute-values payload:', JSON.stringify(values));try {
+    console.log('[BC] PUT attribute-values payload:', JSON.stringify(values));
+
+    try {
         await axios.put(
             `${BC_BASE()}/v3/customers/attribute-values`,
             values,
