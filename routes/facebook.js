@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { findOrCreateCustomer } = require('../helpers/bigcommerce');
-const { buildLoginJwt } = require('../helpers/jwt');
+const { sign } = require('../helpers/tempToken');
 
 const router = express.Router();
 
@@ -63,9 +63,9 @@ router.get('/callback', async (req, res) => {
         // Find or create BigCommerce customer
         const customerId = await findOrCreateCustomer({ email, firstName, lastName });
 
-        // Build BC login JWT and redirect
-        const jwt = buildLoginJwt(customerId);
-        res.redirect(`${process.env.BC_STORE_URL}/login/token/${jwt}`);
+        // Redirect to location page with a short-lived token
+        const tempToken = sign({ customerId });
+        res.redirect(`${process.env.BASE_URL}/location?token=${encodeURIComponent(tempToken)}`);
 
     } catch (err) {
         console.error('[Facebook] Callback error:', err.response?.data || err.message);

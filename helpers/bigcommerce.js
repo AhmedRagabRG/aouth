@@ -56,4 +56,76 @@ async function findOrCreateCustomer({ email, firstName, lastName }) {
     return customer.id;
 }
 
-module.exports = { findOrCreateCustomer };
+// Cache attribute IDs so we don't re-fetch every time
+let _attrCache = null;
+
+/**
+ * Ensure the 4 location customer attributes exist in BC, return their IDs.
+ */
+async function ensureLocationAttributes() {
+    if (_attrCache) return _attrCache;
+
+    const res = await axios.get(`${BC_BASE()}/v3/customers/attributes`, {
+        headers: BC_HEADERS(),
+    });
+
+    const existing = res.data.data;
+    const needed = ['latitude', 'longitude', 'building_number', 'floor_number'];
+    const attrMap = {};
+
+    for (const attr of existing) {
+        if (needed.includes(attr.name)) {
+            attrMap[attr.name] = attr.id;
+        }
+    }
+
+    // Create any that are missing
+    for (const name of needed) {
+        if (!attrMap[name]) {
+            const created = await axios.post(
+                `${BC_BASE()}/v3/customers/attributes`,
+                {
+                    name,
+                    type: name === 'building_number' || name === 'floor_number' ? 'string' : 'string',
+                    customer_can_edit: false,
+                    is_visible: false,
+                    is_required: false,
+                },
+                { headers: BC_HEADERS() }
+            );
+            attrMap[name] = created.data.data.id;
+            console.log(`[BC] Created customer attribute: ${name} (id: ${attrMap[name]})`);
+        }
+    }
+
+    _attrCache = attrMap;
+    return attrMap;
+}
+
+/**
+ * Save GPS + building + floor to BigCommerce customer attributes.
+ */
+async function saveCustomerLocation(customerId, { latitude, longitude, building, floor }) {
+    const attrs = await ensureLocationAttributes();
+
+    const values = [
+        { attribute_id: attrs['latitude'],       customer_id: customerId, val: String(latitude) },
+        { attribute_id: attrs['longitude'],      customer_id: customerId, val: String(longitude) },
+        { attribute_id: attrs['building_number'],customer_id: customerId, val: String(building) },
+        { attribute_id: attrs['floor_number'],   customer_id: customerId, val: String(floor) },
+    ].map(({ attribute_id, customer_id, val }) => ({
+        attribute_id,
+        customer_id,
+        attribute_value: val,
+    }));
+
+    await axios.put(
+        `${BC_BASE()}/v3/customers/attribute-values`,
+        values,
+        { headers: BC_HEADERS() }
+    );
+
+    console.log(`[BC] Saved location for customer ${customerId}: lat=${latitude}, lng=${longitude}, building=${building}, floor=${floor}`);
+}
+
+module.exports = { findOrCreateCustomer, saveCustomerLocation };
