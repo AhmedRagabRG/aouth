@@ -212,7 +212,7 @@ async function saveCustomerAddress(customerId, { latitude, longitude, building, 
         first_name:        firstName,
         last_name:         lastName,
         address1:          `Building ${building}, Floor ${floor}, Apt ${apartment}`,
-        address2:          `GPS: ${latitude}, ${longitude}`,
+        address2:          `https://www.google.com/maps?q=${latitude},${longitude}`,
 
         city:              geo.city,
         country_code:      geo.countryCode,
