@@ -5,6 +5,11 @@ const { sign } = require('../helpers/tempToken');
 
 const router = express.Router();
 
+// Falls back to <BC_STORE_URL>/location/ if BC_LOCATION_PAGE_URL is not set
+function locationPageUrl() {
+    return process.env.BC_LOCATION_PAGE_URL || `${process.env.BC_STORE_URL}/location/`;
+}
+
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
@@ -66,10 +71,14 @@ router.get('/callback', async (req, res) => {
 
         // Redirect to the BigCommerce theme location page
         const tempToken = sign({ customerId });
-        res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${encodeURIComponent(tempToken)}`);
+        res.redirect(`${locationPageUrl()}?token=${encodeURIComponent(tempToken)}`);
 
     } catch (err) {
-        console.error('[Google] Callback error:', err.response?.data || err.message);
+        const status = err.response?.status;
+        const detail = typeof err.response?.data === 'string'
+            ? err.response.data.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+            : JSON.stringify(err.response?.data)?.slice(0, 300);
+        console.error(`[Google] Callback error (HTTP ${status}):`, detail || err.message);
         res.redirect(`${process.env.BC_STORE_URL}/login.php?action=create_account`);
     }
 });

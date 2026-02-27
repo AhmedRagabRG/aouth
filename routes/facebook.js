@@ -5,6 +5,11 @@ const { sign } = require('../helpers/tempToken');
 
 const router = express.Router();
 
+// Falls back to <BC_STORE_URL>/location/ if BC_LOCATION_PAGE_URL is not set
+function locationPageUrl() {
+    return process.env.BC_LOCATION_PAGE_URL || `${process.env.BC_STORE_URL}/location/`;
+}
+
 const FB_AUTH_URL = 'https://www.facebook.com/v18.0/dialog/oauth';
 const FB_TOKEN_URL = 'https://graph.facebook.com/v18.0/oauth/access_token';
 const FB_PROFILE_URL = 'https://graph.facebook.com/me';
@@ -65,10 +70,14 @@ router.get('/callback', async (req, res) => {
 
         // Redirect to the BigCommerce theme location page
         const tempToken = sign({ customerId });
-        res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${encodeURIComponent(tempToken)}`);
+        res.redirect(`${locationPageUrl()}?token=${encodeURIComponent(tempToken)}`);
 
     } catch (err) {
-        console.error('[Facebook] Callback error:', err.response?.data || err.message);
+        const status = err.response?.status;
+        const detail = typeof err.response?.data === 'string'
+            ? err.response.data.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+            : JSON.stringify(err.response?.data)?.slice(0, 300);
+        console.error(`[Facebook] Callback error (HTTP ${status}):`, detail || err.message);
         res.redirect(`${process.env.BC_STORE_URL}/login.php?action=create_account`);
     }
 });

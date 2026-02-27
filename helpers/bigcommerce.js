@@ -3,6 +3,16 @@ const axios = require('axios');
 const BC_BASE = () =>
     `https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}`;
 
+// Throws a readable error instead of dumping an HTML page
+function bcError(label, err) {
+    const status = err.response?.status;
+    const body   = err.response?.data;
+    const detail = typeof body === 'string'
+        ? body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+        : JSON.stringify(body)?.slice(0, 200);
+    throw new Error(`[BC:${label}] HTTP ${status}: ${detail || err.message}`);
+}
+
 const BC_HEADERS = () => ({
     'X-Auth-Token': process.env.BC_ACCESS_TOKEN,
     'Content-Type': 'application/json',
@@ -14,12 +24,14 @@ const BC_HEADERS = () => ({
  * Returns the customer object or null.
  */
 async function findCustomerByEmail(email) {
-    const res = await axios.get(
-        `${BC_BASE()}/v3/customers?email:in=${encodeURIComponent(email)}`,
-        { headers: BC_HEADERS() }
-    );
-    const data = res.data.data;
-    return data && data.length > 0 ? data[0] : null;
+    try {
+        const res = await axios.get(
+            `${BC_BASE()}/v3/customers?email:in=${encodeURIComponent(email)}`,
+            { headers: BC_HEADERS() }
+        );
+        const data = res.data.data;
+        return data && data.length > 0 ? data[0] : null;
+    } catch (err) { bcError('findCustomer', err); }
 }
 
 /**
@@ -27,6 +39,7 @@ async function findCustomerByEmail(email) {
  * Returns the created customer object.
  */
 async function createCustomer({ email, firstName, lastName }) {
+    try {
     const res = await axios.post(
         `${BC_BASE()}/v3/customers`,
         [
@@ -40,6 +53,7 @@ async function createCustomer({ email, firstName, lastName }) {
         { headers: BC_HEADERS() }
     );
     return res.data.data[0];
+    } catch (err) { bcError('createCustomer', err); }
 }
 
 /**
