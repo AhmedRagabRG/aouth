@@ -275,7 +275,13 @@ router.post('/save', async (req, res) => {
     }
 
     const loginJwt = buildLoginJwt(payload.customerId);
-    res.redirect(`${process.env.BC_STORE_URL}/login/token/${loginJwt}`);
+    const redirectUrl = `${process.env.BC_STORE_URL}/login/token/${loginJwt}`;
+
+    // AJAX request (from biometric registration flow) — return JSON
+    if (req.headers['x-requested-with'] === 'XMLHttpRequest') {
+        return res.json({ ok: true, loginUrl: redirectUrl, token });
+    }
+    res.redirect(redirectUrl);
 });
 
 module.exports = router;

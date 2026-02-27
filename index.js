@@ -1,8 +1,9 @@
 require('dotenv').config();
 const express = require('express');
-const googleRouter = require('./routes/google');
-const facebookRouter = require('./routes/facebook');
-const locationRouter = require('./routes/location');
+const googleRouter    = require('./routes/google');
+const facebookRouter  = require('./routes/facebook');
+const locationRouter  = require('./routes/location');
+const webauthnRouter  = require('./routes/webauthn');
 
 const app = express();
 const PORT = process.env.PORT || 3030;
@@ -14,9 +15,10 @@ app.use(express.urlencoded({ extended: true })); // needed for location form POS
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // OAuth routes
-app.use('/oauth/google', googleRouter);
+app.use('/oauth/google',   googleRouter);
 app.use('/oauth/facebook', facebookRouter);
-app.use('/location', locationRouter);
+app.use('/location',       locationRouter);
+app.use('/webauthn',       webauthnRouter);
 
 // 404 fallback
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
