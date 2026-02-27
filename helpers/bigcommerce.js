@@ -183,32 +183,45 @@ async function saveCustomerAddress(customerId, { latitude, longitude, building, 
         customer_id:       cid,
         first_name:        firstName,
         last_name:         lastName,
-        address1:          `Building ${building}`,
-        address2:          `Floor ${floor}`,
-        company:           `GPS: ${latitude}, ${longitude}`,
+        address1:          `Building ${building}, Floor ${floor}`,
+        address2:          `GPS: ${latitude}, ${longitude}`,
         city:              'Cairo',
         country_code:      'EG',
-        state_or_province: '',
-        postal_code:       '',
+        state_or_province: 'Cairo',
+        postal_code:       '11511',
+        phone:             '',
+        address_type:      'residential',
     }];
 
     if (existingId) {
         // Update existing address
         addressPayload[0].id = existingId;
-        await axios.put(
-            `${BC_BASE()}/v3/customers/addresses`,
-            addressPayload,
-            { headers: BC_HEADERS() }
-        );
-        console.log(`[BC] Updated address (id: ${existingId}) for customer ${cid}`);
+        try {
+            await axios.put(
+                `${BC_BASE()}/v3/customers/addresses`,
+                addressPayload,
+                { headers: BC_HEADERS() }
+            );
+            console.log(`[BC] Updated address (id: ${existingId}) for customer ${cid}`);
+        } catch (err) {
+            const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message;
+            console.error(`[BC] Failed to update address (HTTP ${err.response?.status}):`, detail);
+            throw new Error(detail);
+        }
     } else {
         // Create new address
-        await axios.post(
-            `${BC_BASE()}/v3/customers/addresses`,
-            addressPayload,
-            { headers: BC_HEADERS() }
-        );
-        console.log(`[BC] Created address for customer ${cid}`);
+        try {
+            await axios.post(
+                `${BC_BASE()}/v3/customers/addresses`,
+                addressPayload,
+                { headers: BC_HEADERS() }
+            );
+            console.log(`[BC] Created address for customer ${cid}`);
+        } catch (err) {
+            const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message;
+            console.error(`[BC] Failed to create address (HTTP ${err.response?.status}):`, detail);
+            throw new Error(detail);
+        }
     }
 }
 
