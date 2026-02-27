@@ -77,7 +77,7 @@ router.post('/register/options', async (req, res) => {
     const options = await generateRegistrationOptions({
         rpName:  RP_NAME(),
         rpID:    RP_ID(),
-        userID:  customerId,
+        userID:  Buffer.from(String(customerId), 'utf8'),  // must be raw bytes, not base64url string
         userName: `customer_${customerId}`,
         attestationType: 'none',
         excludeCredentials: existingCreds.map(c => ({
