@@ -225,7 +225,7 @@ router.get('/', (req, res) => {
 
 // POST /location/save  — save location & log user in
 router.post('/save', async (req, res) => {
-    const { token, latitude, longitude, building, floor } = req.body;
+    const { token, latitude, longitude, building, floor, apartment } = req.body;
 
     // Log everything received so we can debug
     console.log('[Location] POST /save body:', {
@@ -234,6 +234,7 @@ router.post('/save', async (req, res) => {
         longitude,
         building,
         floor,
+        apartment,
     });
 
     if (!token) {
@@ -253,6 +254,7 @@ router.post('/save', async (req, res) => {
     if (!longitude || longitude.trim() === '') missing.push('longitude');
     if (!building || String(building).trim() === '')  missing.push('building');
     if (floor === undefined || floor === null || String(floor).trim() === '') missing.push('floor');
+    if (!apartment || String(apartment).trim() === '') missing.push('apartment');
 
     if (missing.length) {
         console.warn('[Location] Missing fields:', missing);
@@ -261,8 +263,8 @@ router.post('/save', async (req, res) => {
 
     try {
         await Promise.all([
-            saveCustomerLocation(payload.customerId, { latitude, longitude, building, floor }),
-            saveCustomerAddress(payload.customerId,  { latitude, longitude, building, floor }),
+            saveCustomerLocation(payload.customerId, { latitude, longitude, building, floor, apartment }),
+            saveCustomerAddress(payload.customerId,  { latitude, longitude, building, floor, apartment }),
         ]);
     } catch (err) {
         console.error('[Location] Failed to save location/address:', err.message);

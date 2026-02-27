@@ -84,7 +84,7 @@ async function ensureLocationAttributes() {
     });
 
     const existing = res.data.data;
-    const needed = ['latitude', 'longitude', 'building_number', 'floor_number'];
+    const needed = ['latitude', 'longitude', 'building_number', 'floor_number', 'apartment_number'];
     const attrMap = {};
 
     for (const attr of existing) {
@@ -120,7 +120,7 @@ async function ensureLocationAttributes() {
 /**
  * Save GPS + building + floor to BigCommerce customer attributes.
  */
-async function saveCustomerLocation(customerId, { latitude, longitude, building, floor }) {
+async function saveCustomerLocation(customerId, { latitude, longitude, building, floor, apartment }) {
     const attrs = await ensureLocationAttributes();
 
     // BC requires customer_id and attribute_id to be integers — coerce explicitly
@@ -129,10 +129,11 @@ async function saveCustomerLocation(customerId, { latitude, longitude, building,
     console.log('[BC] customerId (raw):', customerId, '| parsed:', cid);
 
     const values = [
-        { attribute_id: parseInt(attrs['latitude'],        10), customer_id: cid, value: String(latitude) },
-        { attribute_id: parseInt(attrs['longitude'],       10), customer_id: cid, value: String(longitude) },
+        { attribute_id: parseInt(attrs['latitude'],         10), customer_id: cid, value: String(latitude) },
+        { attribute_id: parseInt(attrs['longitude'],        10), customer_id: cid, value: String(longitude) },
         { attribute_id: parseInt(attrs['building_number'], 10), customer_id: cid, value: String(building) },
         { attribute_id: parseInt(attrs['floor_number'],    10), customer_id: cid, value: String(floor) },
+        { attribute_id: parseInt(attrs['apartment_number'],10), customer_id: cid, value: String(apartment) },
     ];
 
     console.log('[BC] PUT attribute-values payload:', JSON.stringify(values));
@@ -143,7 +144,7 @@ async function saveCustomerLocation(customerId, { latitude, longitude, building,
             values,
             { headers: BC_HEADERS() }
         );
-        console.log(`[BC] Saved location for customer ${customerId}: lat=${latitude}, lng=${longitude}, building=${building}, floor=${floor}`);
+        console.log(`[BC] Saved location for customer ${customerId}: lat=${latitude}, lng=${longitude}, building=${building}, floor=${floor}, apt=${apartment}`);
     } catch (err) {
         const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message;
         console.error(`[BC] Failed to save attribute-values (HTTP ${err.response?.status}):`, detail);
@@ -178,7 +179,7 @@ async function reverseGeocode(latitude, longitude) {
 /**
  * Save (create or update) a customer address with building + floor + GPS.
  */
-async function saveCustomerAddress(customerId, { latitude, longitude, building, floor }) {
+async function saveCustomerAddress(customerId, { latitude, longitude, building, floor, apartment }) {
     const cid = parseInt(customerId, 10);
 
     // Get customer info so we have their name for the address record
@@ -210,8 +211,9 @@ async function saveCustomerAddress(customerId, { latitude, longitude, building, 
         customer_id:       cid,
         first_name:        firstName,
         last_name:         lastName,
-        address1:          `Building ${building}, Floor ${floor}`,
+        address1:          `Building ${building}, Floor ${floor}, Apt ${apartment}`,
         address2:          `GPS: ${latitude}, ${longitude}`,
+
         city:              geo.city,
         country_code:      geo.countryCode,
         state_or_province: geo.state,
