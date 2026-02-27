@@ -74,24 +74,31 @@ router.post('/register/options', async (req, res) => {
     // Exclude already-registered credentials so user cannot double-register
     const existingCreds = credStore.getCredentialsByCustomerId(customerId);
 
-    const options = await generateRegistrationOptions({
-        rpName:  RP_NAME(),
-        rpID:    RP_ID(),
-        userID:  Buffer.from(String(customerId), 'utf8'),  // must be raw bytes, not base64url string
-        userName: `customer_${customerId}`,
-        attestationType: 'none',
-        excludeCredentials: existingCreds.map(c => ({
-            id: b64url.toBuffer(c.id),
-            type: 'public-key',
-            transports: c.transports,
-        })),
-        authenticatorSelection: {
-            authenticatorAttachment: 'platform', // internal: Face ID / Touch ID only
-            userVerification: 'required',
-            residentKey: 'preferred',
-        },
-        supportedAlgorithmIDs: [-7, -257], // ES256, RS256
-    });
+    let options;
+    try {
+        options = await generateRegistrationOptions({
+            rpName:  RP_NAME(),
+            rpID:    RP_ID(),
+            // Pass as base64url string — works with all versions of @simplewebauthn/server
+            userID:   Buffer.from(String(customerId), 'utf8').toString('base64url'),
+            userName: `customer_${customerId}`,
+            attestationType: 'none',
+            excludeCredentials: existingCreds.map(c => ({
+                id: b64url.toBuffer(c.id),
+                type: 'public-key',
+                transports: c.transports,
+            })),
+            authenticatorSelection: {
+                authenticatorAttachment: 'platform',
+                userVerification: 'required',
+                residentKey: 'preferred',
+            },
+            supportedAlgorithmIDs: [-7, -257],
+        });
+    } catch (err) {
+        console.error('[WebAuthn] generateRegistrationOptions failed:', err.message);
+        return res.status(500).json({ error: err.message });
+    }
 
     challenges.set(`reg_${customerId}`, { challenge: options.challenge, ts: Date.now() });
     console.log(`[WebAuthn] Registration options generated for customer ${customerId}`);
