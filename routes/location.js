@@ -227,6 +227,15 @@ router.get('/', (req, res) => {
 router.post('/save', async (req, res) => {
     const { token, latitude, longitude, building, floor } = req.body;
 
+    // Log everything received so we can debug
+    console.log('[Location] POST /save body:', {
+        token: token ? token.slice(0, 20) + '...' : '(missing)',
+        latitude,
+        longitude,
+        building,
+        floor,
+    });
+
     if (!token) {
         return res.redirect(`${process.env.BC_STORE_URL}/login.php`);
     }
@@ -238,8 +247,16 @@ router.post('/save', async (req, res) => {
         return res.status(400).send('Session expired. Please <a href="/oauth/google/start">try again</a>.');
     }
 
-    if (!latitude || !longitude || !building || floor === undefined) {
-        return res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${token}&error=missing_fields`);
+    // Strict validation — all fields must be non-empty strings
+    const missing = [];
+    if (!latitude || latitude.trim() === '')   missing.push('latitude');
+    if (!longitude || longitude.trim() === '') missing.push('longitude');
+    if (!building || String(building).trim() === '')  missing.push('building');
+    if (floor === undefined || floor === null || String(floor).trim() === '') missing.push('floor');
+
+    if (missing.length) {
+        console.warn('[Location] Missing fields:', missing);
+        return res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${encodeURIComponent(token)}&error=missing_fields`);
     }
 
     try {

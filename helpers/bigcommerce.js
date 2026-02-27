@@ -124,17 +124,13 @@ async function saveCustomerLocation(customerId, { latitude, longitude, building,
     const attrs = await ensureLocationAttributes();
 
     const values = [
-        { attribute_id: attrs['latitude'],       customer_id: customerId, val: String(latitude) },
-        { attribute_id: attrs['longitude'],      customer_id: customerId, val: String(longitude) },
-        { attribute_id: attrs['building_number'],customer_id: customerId, val: String(building) },
-        { attribute_id: attrs['floor_number'],   customer_id: customerId, val: String(floor) },
-    ].map(({ attribute_id, customer_id, val }) => ({
-        attribute_id,
-        customer_id,
-        attribute_value: val,
-    }));
+        { attribute_id: attrs['latitude'],        customer_id: customerId, attribute_value: String(latitude) },
+        { attribute_id: attrs['longitude'],       customer_id: customerId, attribute_value: String(longitude) },
+        { attribute_id: attrs['building_number'], customer_id: customerId, attribute_value: String(building) },
+        { attribute_id: attrs['floor_number'],    customer_id: customerId, attribute_value: String(floor) },
+    ];
 
-    try {
+    console.log('[BC] PUT attribute-values payload:', JSON.stringify(values));try {
         await axios.put(
             `${BC_BASE()}/v3/customers/attribute-values`,
             values,
