@@ -96,19 +96,20 @@ async function ensureLocationAttributes() {
     // Create any that are missing
     for (const name of needed) {
         if (!attrMap[name]) {
-            const created = await axios.post(
-                `${BC_BASE()}/v3/customers/attributes`,
-                {
-                    name,
-                    type: name === 'building_number' || name === 'floor_number' ? 'string' : 'string',
-                    customer_can_edit: false,
-                    is_visible: false,
-                    is_required: false,
-                },
-                { headers: BC_HEADERS() }
-            );
-            attrMap[name] = created.data.data.id;
-            console.log(`[BC] Created customer attribute: ${name} (id: ${attrMap[name]})`);
+            try {
+                // BC v3 requires an ARRAY body for POST /customers/attributes
+                const created = await axios.post(
+                    `${BC_BASE()}/v3/customers/attributes`,
+                    [{ name, type: 'string' }],
+                    { headers: BC_HEADERS() }
+                );
+                attrMap[name] = created.data.data[0].id;
+                console.log(`[BC] Created customer attribute: ${name} (id: ${attrMap[name]})`);
+            } catch (err) {
+                const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 200) : err.message;
+                console.error(`[BC] Failed to create attribute "${name}" (HTTP ${err.response?.status}):`, detail);
+                throw new Error(`Cannot create BC attribute "${name}": ${detail}`);
+            }
         }
     }
 
@@ -133,13 +134,18 @@ async function saveCustomerLocation(customerId, { latitude, longitude, building,
         attribute_value: val,
     }));
 
-    await axios.put(
-        `${BC_BASE()}/v3/customers/attribute-values`,
-        values,
-        { headers: BC_HEADERS() }
-    );
-
-    console.log(`[BC] Saved location for customer ${customerId}: lat=${latitude}, lng=${longitude}, building=${building}, floor=${floor}`);
+    try {
+        await axios.put(
+            `${BC_BASE()}/v3/customers/attribute-values`,
+            values,
+            { headers: BC_HEADERS() }
+        );
+        console.log(`[BC] Saved location for customer ${customerId}: lat=${latitude}, lng=${longitude}, building=${building}, floor=${floor}`);
+    } catch (err) {
+        const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message;
+        console.error(`[BC] Failed to save attribute-values (HTTP ${err.response?.status}):`, detail);
+        throw new Error(`Failed to save location attributes: ${detail}`);
+    }
 }
 
 module.exports = { findOrCreateCustomer, saveCustomerLocation };
