@@ -1,6 +1,6 @@
 const express = require('express');
 const { verify } = require('../helpers/tempToken');
-const { saveCustomerLocation } = require('../helpers/bigcommerce');
+const { saveCustomerLocation, saveCustomerAddress } = require('../helpers/bigcommerce');
 const { buildLoginJwt } = require('../helpers/jwt');
 
 const router = express.Router();
@@ -260,14 +260,12 @@ router.post('/save', async (req, res) => {
     }
 
     try {
-        await saveCustomerLocation(payload.customerId, {
-            latitude,
-            longitude,
-            building,
-            floor,
-        });
+        await Promise.all([
+            saveCustomerLocation(payload.customerId, { latitude, longitude, building, floor }),
+            saveCustomerAddress(payload.customerId,  { latitude, longitude, building, floor }),
+        ]);
     } catch (err) {
-        console.error('[Location] Failed to save location:', err.message);
+        console.error('[Location] Failed to save location/address:', err.message);
         // Non-fatal — still log the user in
     }
 

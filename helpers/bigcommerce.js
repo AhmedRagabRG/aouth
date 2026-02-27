@@ -151,4 +151,65 @@ async function saveCustomerLocation(customerId, { latitude, longitude, building,
     }
 }
 
-module.exports = { findOrCreateCustomer, saveCustomerLocation };
+/**
+ * Save (create or update) a customer address with building + floor + GPS.
+ * Uses address1 for building, address2 for floor, and stores GPS in company field.
+ */
+async function saveCustomerAddress(customerId, { latitude, longitude, building, floor }) {
+    const cid = parseInt(customerId, 10);
+
+    // Get customer info so we have their name for the address record
+    let firstName = 'Customer', lastName = String(cid);
+    try {
+        const custRes = await axios.get(
+            `${BC_BASE()}/v3/customers?id:in=${cid}`,
+            { headers: BC_HEADERS() }
+        );
+        const c = custRes.data.data?.[0];
+        if (c) { firstName = c.first_name || firstName; lastName = c.last_name || lastName; }
+    } catch (_) { /* non-fatal — use fallback name */ }
+
+    // Check for existing address
+    let existingId = null;
+    try {
+        const addrRes = await axios.get(
+            `${BC_BASE()}/v3/customers/addresses?customer_id:in=${cid}`,
+            { headers: BC_HEADERS() }
+        );
+        existingId = addrRes.data.data?.[0]?.id || null;
+    } catch (_) { /* non-fatal */ }
+
+    const addressPayload = [{
+        customer_id:       cid,
+        first_name:        firstName,
+        last_name:         lastName,
+        address1:          `Building ${building}`,
+        address2:          `Floor ${floor}`,
+        company:           `GPS: ${latitude}, ${longitude}`,
+        city:              'Cairo',
+        country_code:      'EG',
+        state_or_province: '',
+        postal_code:       '',
+    }];
+
+    if (existingId) {
+        // Update existing address
+        addressPayload[0].id = existingId;
+        await axios.put(
+            `${BC_BASE()}/v3/customers/addresses`,
+            addressPayload,
+            { headers: BC_HEADERS() }
+        );
+        console.log(`[BC] Updated address (id: ${existingId}) for customer ${cid}`);
+    } else {
+        // Create new address
+        await axios.post(
+            `${BC_BASE()}/v3/customers/addresses`,
+            addressPayload,
+            { headers: BC_HEADERS() }
+        );
+        console.log(`[BC] Created address for customer ${cid}`);
+    }
+}
+
+module.exports = { findOrCreateCustomer, saveCustomerLocation, saveCustomerAddress };
