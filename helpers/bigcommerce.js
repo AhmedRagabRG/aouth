@@ -152,8 +152,31 @@ async function saveCustomerLocation(customerId, { latitude, longitude, building,
 }
 
 /**
+ * Reverse geocode lat/lng using OpenStreetMap Nominatim (free, no key needed).
+ * Returns { city, state, postalCode, countryCode }.
+ */
+async function reverseGeocode(latitude, longitude) {
+    try {
+        const res = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+            params: { lat: latitude, lon: longitude, format: 'json' },
+            headers: { 'User-Agent': 'mozher-store-oauth/1.0' },
+            timeout: 5000,
+        });
+        const a = res.data.address || {};
+        return {
+            city:        a.city || a.town || a.village || a.county || '',
+            state:       a.state || a.region || '',
+            postalCode:  a.postcode || '',
+            countryCode: (a.country_code || 'EG').toUpperCase(),
+        };
+    } catch (err) {
+        console.warn('[Geocode] Reverse geocode failed, using fallbacks:', err.message);
+        return { city: 'Cairo', state: 'Cairo', postalCode: '11511', countryCode: 'EG' };
+    }
+}
+
+/**
  * Save (create or update) a customer address with building + floor + GPS.
- * Uses address1 for building, address2 for floor, and stores GPS in company field.
  */
 async function saveCustomerAddress(customerId, { latitude, longitude, building, floor }) {
     const cid = parseInt(customerId, 10);
@@ -179,16 +202,20 @@ async function saveCustomerAddress(customerId, { latitude, longitude, building, 
         existingId = addrRes.data.data?.[0]?.id || null;
     } catch (_) { /* non-fatal */ }
 
+    // Reverse geocode to get real city/state/postal from GPS
+    const geo = await reverseGeocode(latitude, longitude);
+    console.log('[Geocode] Resolved:', JSON.stringify(geo));
+
     const addressPayload = [{
         customer_id:       cid,
         first_name:        firstName,
         last_name:         lastName,
         address1:          `Building ${building}, Floor ${floor}`,
         address2:          `GPS: ${latitude}, ${longitude}`,
-        city:              'Cairo',
-        country_code:      'EG',
-        state_or_province: 'Cairo',
-        postal_code:       '11511',
+        city:              geo.city,
+        country_code:      geo.countryCode,
+        state_or_province: geo.state,
+        postal_code:       geo.postalCode,
         phone:             '',
         address_type:      'residential',
     }];
