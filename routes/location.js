@@ -5,6 +5,16 @@ const { buildLoginJwt } = require('../helpers/jwt');
 
 const router = express.Router();
 
+// CORS — allow AJAX from the BC store domain
+router.use((req, res, next) => {
+    const origin = process.env.BC_STORE_URL || 'https://mozher.com';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
+
 // GET /location?token=xxx  — show the location form
 router.get('/', (req, res) => {
     const { token } = req.query;
