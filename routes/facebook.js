@@ -63,9 +63,9 @@ router.get('/callback', async (req, res) => {
         // Find or create BigCommerce customer
         const customerId = await findOrCreateCustomer({ email, firstName, lastName });
 
-        // Redirect to location page with a short-lived token
+        // Redirect to the BigCommerce theme location page
         const tempToken = sign({ customerId });
-        res.redirect(`${process.env.BASE_URL}/location?token=${encodeURIComponent(tempToken)}`);
+        res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${encodeURIComponent(tempToken)}`);
 
     } catch (err) {
         console.error('[Facebook] Callback error:', err.response?.data || err.message);

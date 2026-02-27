@@ -13,11 +13,8 @@ router.get('/', (req, res) => {
         return res.redirect(`${process.env.BC_STORE_URL}/login.php`);
     }
 
-    try {
-        verify(token); // just validate it exists & not expired before serving page
-    } catch {
-        return res.status(400).send('Session expired. Please <a href="/oauth/google/start">try again</a>.');
-    }
+    // Location page is now served by the BigCommerce theme
+    return res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${encodeURIComponent(token)}`);
 
     res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -242,7 +239,7 @@ router.post('/save', async (req, res) => {
     }
 
     if (!latitude || !longitude || !building || floor === undefined) {
-        return res.redirect(`/location?token=${token}&error=missing_fields`);
+        return res.redirect(`${process.env.BC_LOCATION_PAGE_URL}?token=${token}&error=missing_fields`);
     }
 
     try {
