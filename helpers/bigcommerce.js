@@ -256,26 +256,54 @@ async function saveCustomerAddress(customerId, { latitude, longitude, building, 
 }
 
 /**
- * Check if a customer already has latitude saved in their attributes.
- * Returns true if location was previously submitted.
+ * Check if a customer already has location data saved.
+ * Returns true if any of the following are true:
+ *   1. The customer has a latitude attribute value stored
+ *   2. The customer has any saved BC address (address = they've been through our flow)
  */
 async function hasLocationSaved(customerId) {
+    const cid = parseInt(customerId, 10);
+
+    // Check 1: latitude attribute value
     try {
-        const cid = parseInt(customerId, 10);
-        const res = await axios.get(
+        const attrRes = await axios.get(
             `${BC_BASE()}/v3/customers/attribute-values?customer_id:in=${cid}`,
             { headers: BC_HEADERS() }
         );
-        const values = res.data.data || [];
-        // Get attribute IDs to find which one is 'latitude'
-        const attrs = await ensureLocationAttributes();
-        const latAttrId = parseInt(attrs['latitude'], 10);
-        const found = values.find(v => parseInt(v.attribute_id, 10) === latAttrId && v.value && v.value.trim() !== '');
-        return !!found;
+        const values = attrRes.data.data || [];
+        if (values.length > 0) {
+            // Has ANY attribute values saved — definitely a returning customer
+            const attrs = await ensureLocationAttributes();
+            const latAttrId = parseInt(attrs['latitude'], 10);
+            const latFound = values.find(v =>
+                parseInt(v.attribute_id, 10) === latAttrId && v.value && v.value.trim() !== ''
+            );
+            if (latFound) {
+                console.log(`[BC] hasLocationSaved: customer ${cid} has latitude attribute — skipping location page`);
+                return true;
+            }
+        }
     } catch (err) {
-        console.warn('[BC] hasLocationSaved check failed:', err.message);
-        return false; // fail open — show location page to be safe
+        console.warn('[BC] hasLocationSaved attribute check failed:', err.message);
     }
+
+    // Check 2: existing addresses — if they have any address saved they've been through the flow
+    try {
+        const addrRes = await axios.get(
+            `${BC_BASE()}/v2/customers/${cid}/addresses`,
+            { headers: BC_HEADERS() }
+        );
+        const addresses = addrRes.data || [];
+        if (Array.isArray(addresses) && addresses.length > 0) {
+            console.log(`[BC] hasLocationSaved: customer ${cid} has ${addresses.length} address(es) — skipping location page`);
+            return true;
+        }
+    } catch (err) {
+        console.warn('[BC] hasLocationSaved address check failed:', err.message);
+    }
+
+    console.log(`[BC] hasLocationSaved: customer ${cid} has no saved location — showing location page`);
+    return false;
 }
 
 module.exports = { findOrCreateCustomer, saveCustomerLocation, saveCustomerAddress, hasLocationSaved };
