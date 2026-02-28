@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const googleRouter    = require('./routes/google');
 const facebookRouter  = require('./routes/facebook');
+const instagramRouter = require('./routes/instagram');
 const locationRouter  = require('./routes/location');
 const webauthnRouter  = require('./routes/webauthn');
 
@@ -15,9 +16,10 @@ app.use(express.urlencoded({ extended: true })); // needed for location form POS
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // OAuth routes
-app.use('/oauth/google',   googleRouter);
-app.use('/oauth/facebook', facebookRouter);
-app.use('/location',       locationRouter);
+app.use('/oauth/google',    googleRouter);
+app.use('/oauth/facebook',  facebookRouter);
+app.use('/oauth/instagram', instagramRouter);
+app.use('/location',        locationRouter);
 app.use('/webauthn',       webauthnRouter);
 
 // 404 fallback
@@ -31,11 +33,12 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
     console.log(`OAuth server running on port ${PORT}`);
-    console.log(`Google start   → ${process.env.BASE_URL}/oauth/google/start`);
-    console.log(`Facebook start → ${process.env.BASE_URL}/oauth/facebook/start`);
+    console.log(`Google start    → ${process.env.BASE_URL}/oauth/google/start`);
+    console.log(`Facebook start  → ${process.env.BASE_URL}/oauth/facebook/start`);
+    console.log(`Instagram start → ${process.env.BASE_URL}/oauth/instagram/start`);
 
     // Warn about missing optional but important env vars
-    const important = ['BC_LOCATION_PAGE_URL', 'TEMP_TOKEN_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'FB_APP_ID', 'FB_APP_SECRET', 'BC_CLIENT_SECRET', 'BC_ACCESS_TOKEN', 'BC_STORE_HASH'];
+    const important = ['BC_LOCATION_PAGE_URL', 'TEMP_TOKEN_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'FB_APP_ID', 'FB_APP_SECRET', 'IG_APP_ID', 'IG_APP_SECRET', 'BC_CLIENT_SECRET', 'BC_ACCESS_TOKEN', 'BC_STORE_HASH'];
     const missing = important.filter(k => !process.env[k] || process.env[k].startsWith('your_'));
     if (missing.length) {
         console.warn('[WARN] Missing or placeholder env vars:', missing.join(', '));
