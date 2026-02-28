@@ -1,7 +1,8 @@
 const express = require('express');
 const axios = require('axios');
-const { findOrCreateCustomer } = require('../helpers/bigcommerce');
+const { findOrCreateCustomer, hasLocationSaved } = require('../helpers/bigcommerce');
 const { sign } = require('../helpers/tempToken');
+const { buildLoginJwt } = require('../helpers/jwt');
 
 const router = express.Router();
 
@@ -68,7 +69,14 @@ router.get('/callback', async (req, res) => {
         // Find or create BigCommerce customer
         const customerId = await findOrCreateCustomer({ email, firstName, lastName });
 
-        // Redirect to the BigCommerce theme location page
+        // Skip location page for returning customers who already provided their location
+        if (await hasLocationSaved(customerId)) {
+            console.log(`[Facebook] Returning customer ${customerId} — skipping location page`);
+            const loginJwt = buildLoginJwt(customerId);
+            return res.redirect(`${process.env.BC_STORE_URL}/login/token/${loginJwt}`);
+        }
+
+        // New customer — collect location first
         const tempToken = sign({ customerId });
         res.redirect(`${locationPageUrl()}?token=${encodeURIComponent(tempToken)}`);
 

@@ -255,4 +255,27 @@ async function saveCustomerAddress(customerId, { latitude, longitude, building, 
     }
 }
 
-module.exports = { findOrCreateCustomer, saveCustomerLocation, saveCustomerAddress };
+/**
+ * Check if a customer already has latitude saved in their attributes.
+ * Returns true if location was previously submitted.
+ */
+async function hasLocationSaved(customerId) {
+    try {
+        const cid = parseInt(customerId, 10);
+        const res = await axios.get(
+            `${BC_BASE()}/v3/customers/attribute-values?customer_id:in=${cid}`,
+            { headers: BC_HEADERS() }
+        );
+        const values = res.data.data || [];
+        // Get attribute IDs to find which one is 'latitude'
+        const attrs = await ensureLocationAttributes();
+        const latAttrId = parseInt(attrs['latitude'], 10);
+        const found = values.find(v => parseInt(v.attribute_id, 10) === latAttrId && v.value && v.value.trim() !== '');
+        return !!found;
+    } catch (err) {
+        console.warn('[BC] hasLocationSaved check failed:', err.message);
+        return false; // fail open — show location page to be safe
+    }
+}
+
+module.exports = { findOrCreateCustomer, saveCustomerLocation, saveCustomerAddress, hasLocationSaved };
