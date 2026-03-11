@@ -201,52 +201,28 @@ async function saveBuyOrder(order) {
         console.warn('[Buy] Customer find/create failed, using guest order:', err.message);
     }
 
-    // Fetch confirmed product price + variant/option info from BC
+    // Fetch confirmed product price + first available variant_id from BC
     let productName = order.product_name || order.product_slug;
     let productPrice = parseFloat(order.product_price) || 0;
-    let productOptions = []; // v2 option values to include in order line
+    let variantId = null;
     if (order.product_id) {
         try {
-            // Fetch base product info
             const pRes = await axios.get(
                 `${BC_BASE()}/v3/catalog/products/${order.product_id}`,
                 { headers: BC_HEADERS() }
             );
             const p = pRes.data.data;
-            productPrice = p.price || productPrice;
-            productName  = p.name  || productName;
+            productPrice  = p.price || productPrice;
+            productName   = p.name  || productName;
+            variantId     = p.base_variant_id || null;
+            console.log(`[Buy] base_variant_id=${variantId}`);
         } catch (err) {
             console.warn('[Buy] Could not fetch product:', err.message);
         }
-
-        // Fetch option values using v3 options endpoint
-        try {
-            const optsRes = await axios.get(
-                `${BC_BASE()}/v3/catalog/products/${order.product_id}/options`,
-                { headers: BC_HEADERS() }
-            );
-            const opts = optsRes.data.data || [];
-            console.log('[Buy] v3 options:', JSON.stringify(opts.map(o => ({ id: o.id, display_name: o.display_name, values: o.option_values }))));
-            for (const opt of opts) {
-                const values = opt.option_values || [];
-                if (values.length > 0) {
-                    productOptions.push({
-                        id:    opt.id,
-                        value: String(values[0].id),
-                    });
-                }
-            }
-            console.log('[Buy] product options to send:', JSON.stringify(productOptions));
-        } catch (err) {
-            console.warn('[Buy] Could not fetch product options:', err.response?.data || err.message);
-        }
     }
 
-    const productLine = {
-        product_id: parseInt(order.product_id, 10),
-        quantity:   1,
-    };
-    if (productOptions.length > 0) productLine.product_options = productOptions;
+    const productLine = { product_id: parseInt(order.product_id, 10), quantity: 1 };
+    if (variantId) productLine.variant_id = variantId;
     console.log('[Buy] product line:', JSON.stringify(productLine));
 
     const orderPayload = {
