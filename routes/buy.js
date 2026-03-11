@@ -142,29 +142,17 @@ router.post('/order', async (req, res) => {
 });
 
 /**
- * Save a buy order as a BigCommerce customer note / custom field.
- * We store it as a new customer with a note containing the order details,
- * or update an existing customer identified by phone number.
+ * Create a real BigCommerce order via v2 Orders API.
+ * Finds or creates a guest customer, then posts the order.
  */
 async function saveBuyOrder(order) {
-    const timestamp = new Date().toISOString();
+    const [firstName, ...rest] = order.name.trim().split(' ');
+    const lastName = rest.join(' ') || '-';
+    const safePhone = order.phone.replace(/[^0-9]/g, '');
     const mapsUrl = `https://www.google.com/maps?q=${order.latitude},${order.longitude}`;
 
-    const noteText = [
-        `=== BUY ORDER ${timestamp} ===`,
-        `Product:   ${order.product_name || order.product_slug} (ID: ${order.product_id || 'n/a'})`,
-        `Name:      ${order.name}`,
-        `Phone:     ${order.phone}`,
-        `Building:  ${order.building}`,
-        `Floor:     ${order.floor}`,
-        `Apartment: ${order.apartment}`,
-        `Location:  ${order.latitude}, ${order.longitude}`,
-        `Maps:      ${mapsUrl}`,
-        '==============================',
-    ].join('\n');
-
-    // Try to find existing customer by phone
-    let customerId = null;
+    // Find or create customer by phone
+    let customerId = 0; // 0 = guest order in BC
     try {
         const searchRes = await axios.get(
             `${BC_BASE()}/v3/customers?phone:in=${encodeURIComponent(order.phone)}`,
@@ -173,48 +161,83 @@ async function saveBuyOrder(order) {
         const existing = searchRes.data.data;
         if (existing && existing.length > 0) {
             customerId = existing[0].id;
+        } else {
+            // Create a new customer
+            const placeholderEmail = `order-${safePhone}-${Date.now()}@buy.mozher.com`;
+            const created = await axios.post(
+                `${BC_BASE()}/v3/customers`,
+                [{
+                    email:      placeholderEmail,
+                    first_name: firstName,
+                    last_name:  lastName,
+                    phone:      order.phone,
+                    authentication: { force_reset: false },
+                }],
+                { headers: BC_HEADERS() }
+            );
+            customerId = created.data.data[0].id;
+            console.log(`[Buy] Created customer id=${customerId}`);
         }
     } catch (err) {
-        console.warn('[Buy] Could not search customers by phone:', err.message);
+        console.warn('[Buy] Customer find/create failed, using guest order:', err.message);
     }
 
-    if (customerId) {
-        // Append note to existing customer
-        const existingCustomer = await axios.get(
-            `${BC_BASE()}/v3/customers?id:in=${customerId}`,
-            { headers: BC_HEADERS() }
-        ).then(r => r.data.data[0]).catch(() => null);
-
-        const existingNote = (existingCustomer && existingCustomer.notes) || '';
-        const updatedNote = existingNote ? existingNote + '\n\n' + noteText : noteText;
-
-        await axios.put(
-            `${BC_BASE()}/v3/customers`,
-            [{ id: customerId, notes: updatedNote }],
-            { headers: BC_HEADERS() }
-        );
-    } else {
-        // Create a new customer record for this order
-        const [firstName, ...rest] = order.name.trim().split(' ');
-        const lastName = rest.join(' ') || '-';
-
-        // Generate a placeholder email from phone to satisfy BC's required email field
-        const safePhone = order.phone.replace(/[^0-9]/g, '');
-        const placeholderEmail = `order-${safePhone}-${Date.now()}@buy.mozher.com`;
-
-        await axios.post(
-            `${BC_BASE()}/v3/customers`,
-            [{
-                email:      placeholderEmail,
-                first_name: firstName,
-                last_name:  lastName,
-                phone:      order.phone,
-                notes:      noteText,
-                authentication: { force_reset: false },
-            }],
-            { headers: BC_HEADERS() }
-        );
+    // Fetch product price from BC to ensure accuracy
+    let productPrice = parseFloat(order.product_price) || 0;
+    let productName  = order.product_name || order.product_slug;
+    if (order.product_id) {
+        try {
+            const pRes = await axios.get(
+                `${BC_BASE()}/v3/catalog/products/${order.product_id}`,
+                { headers: BC_HEADERS() }
+            );
+            productPrice = pRes.data.data.price || productPrice;
+            productName  = pRes.data.data.name  || productName;
+        } catch (err) {
+            console.warn('[Buy] Could not fetch product price:', err.message);
+        }
     }
+
+    const addressPayload = {
+        first_name:        firstName,
+        last_name:         lastName,
+        street_1:          `Building ${order.building}, Floor ${order.floor}, Apt ${order.apartment}`,
+        street_2:          mapsUrl,
+        city:              'Baghdad',
+        state:             'Baghdad',
+        zip:               '10001',
+        country:           'Iraq',
+        country_iso2:      'IQ',
+        phone:             order.phone,
+        email:             customerId ? undefined : `order-${safePhone}@buy.mozher.com`,
+    };
+
+    // Remove undefined keys
+    Object.keys(addressPayload).forEach(k => addressPayload[k] === undefined && delete addressPayload[k]);
+
+    const orderPayload = {
+        customer_id:      customerId,
+        billing_address:  addressPayload,
+        products: [
+            {
+                product_id: parseInt(order.product_id, 10),
+                quantity:   1,
+            },
+        ],
+        staff_notes: `GPS: ${order.latitude}, ${order.longitude} — Maps: ${mapsUrl}`,
+        customer_message: `Name: ${order.name} | Phone: ${order.phone} | Building: ${order.building} | Floor: ${order.floor} | Apt: ${order.apartment}`,
+        status_id: 1, // Pending
+    };
+
+    const orderRes = await axios.post(
+        `${BC_BASE()}/v2/orders`,
+        orderPayload,
+        { headers: BC_HEADERS() }
+    );
+
+    const bcOrderId = orderRes.data.id;
+    console.log(`[Buy] BC order created: id=${bcOrderId} for product "${productName}" — customer: ${order.name}`);
+    return bcOrderId;
 }
 
 module.exports = router;
