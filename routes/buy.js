@@ -141,7 +141,7 @@ router.post('/order', async (req, res) => {
         return res.json({ ok: true });
 
     } catch (err) {
-        console.error('[Buy] Failed to save order:', err.message);
+        console.error('[Buy] Failed to save order:', err.response?.data || err.message);
         return res.status(500).json({ ok: false, error: 'Failed to save order. Please try again.' });
     }
 });
@@ -188,21 +188,29 @@ async function saveBuyOrder(order) {
         console.warn('[Buy] Customer find/create failed, using guest order:', err.message);
     }
 
-    // Fetch confirmed product price from BC
+    // Fetch confirmed product price + default variant_id from BC
     let productName = order.product_name || order.product_slug;
     let productPrice = parseFloat(order.product_price) || 0;
+    let variantId = null;
     if (order.product_id) {
         try {
             const pRes = await axios.get(
-                `${BC_BASE()}/v3/catalog/products/${order.product_id}`,
+                `${BC_BASE()}/v3/catalog/products/${order.product_id}?include=variants`,
                 { headers: BC_HEADERS() }
             );
-            productPrice = pRes.data.data.price || productPrice;
-            productName  = pRes.data.data.name  || productName;
+            const p = pRes.data.data;
+            productPrice = p.price || productPrice;
+            productName  = p.name  || productName;
+            if (p.variants && p.variants.length > 0) {
+                variantId = p.variants[0].id;
+            }
         } catch (err) {
-            console.warn('[Buy] Could not fetch product price:', err.message);
+            console.warn('[Buy] Could not fetch product/variant:', err.message);
         }
     }
+
+    const productLine = { product_id: parseInt(order.product_id, 10), quantity: 1 };
+    if (variantId) productLine.variant_id = variantId;
 
     const orderPayload = {
         customer_id: customerId,
@@ -219,10 +227,7 @@ async function saveBuyOrder(order) {
             phone:             order.phone,
             email:             placeholderEmail,
         },
-        products: [{
-            product_id: parseInt(order.product_id, 10),
-            quantity:   1,
-        }],
+        products: [productLine],
         staff_notes:      `Building: ${order.building} | Floor: ${order.floor} | Apt: ${order.apartment}${street2 ? ' | Location: ' + street2 : ''}`,
         customer_message: `Name: ${order.name} | Phone: ${order.phone}`,
         status_id: 1,
