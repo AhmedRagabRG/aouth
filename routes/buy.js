@@ -205,15 +205,17 @@ async function saveBuyOrder(order) {
     let productName = order.product_name || order.product_slug;
     let productPrice = parseFloat(order.product_price) || 0;
     let variantId = null;
+    let hasOptions = false;
     if (order.product_id) {
         try {
             const pRes = await axios.get(
-                `${BC_BASE()}/v3/catalog/products/${order.product_id}?include=variants`,
+                `${BC_BASE()}/v3/catalog/products/${order.product_id}?include=variants,options`,
                 { headers: BC_HEADERS() }
             );
             const p = pRes.data.data;
             productPrice = p.price || productPrice;
             productName  = p.name  || productName;
+            hasOptions   = p.options && p.options.length > 0;
             if (p.variants && p.variants.length > 0) {
                 variantId = p.variants[0].id;
             }
@@ -223,7 +225,7 @@ async function saveBuyOrder(order) {
     }
 
     const productLine = { product_id: parseInt(order.product_id, 10), quantity: 1 };
-    if (variantId) productLine.variant_id = variantId;
+    if (variantId && hasOptions) productLine.variant_id = variantId;
     console.log('[Buy] product line:', JSON.stringify(productLine));
 
     const orderPayload = {
