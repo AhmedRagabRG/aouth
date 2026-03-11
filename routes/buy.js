@@ -141,7 +141,7 @@ router.post('/order', async (req, res) => {
         return res.json({ ok: true });
 
     } catch (err) {
-        console.error('[Buy] Failed to save order:', err.response?.data || err.message);
+        console.error('[Buy] Failed to save order:', JSON.stringify(err.response?.data, null, 2) || err.message);
         return res.status(500).json({ ok: false, error: 'Failed to save order. Please try again.' });
     }
 });
@@ -211,6 +211,7 @@ async function saveBuyOrder(order) {
 
     const productLine = { product_id: parseInt(order.product_id, 10), quantity: 1 };
     if (variantId) productLine.variant_id = variantId;
+    console.log('[Buy] product line:', JSON.stringify(productLine));
 
     const orderPayload = {
         customer_id: customerId,
