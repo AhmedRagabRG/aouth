@@ -24,42 +24,47 @@ router.get('/product', async (req, res) => {
     const { slug } = req.query;
     if (!slug) return res.status(400).json({ ok: false, error: 'Missing slug' });
 
+    const normalizedSlug = slug.replace(/\//g, '').toLowerCase();
+
     try {
-        // BC v3 catalog search by custom_url — try exact match with leading/trailing slash
-        const customUrl = '/' + slug + '/';
-        const searchRes = await axios.get(
-            `${BC_BASE()}/v3/catalog/products?url=${encodeURIComponent(customUrl)}&include=images&limit=1`,
-            { headers: BC_HEADERS() }
-        );
+        // BC v3 doesn't support url/custom_url filter directly, so paginate and match manually
+        let page = 1;
+        let found = null;
 
-        let products = searchRes.data.data;
-
-        // Fallback: search all products and match custom_url manually (BC filter can be unreliable)
-        if (!products || products.length === 0) {
-            const allRes = await axios.get(
-                `${BC_BASE()}/v3/catalog/products?include=images&limit=250&is_visible=true`,
+        while (!found) {
+            const pageRes = await axios.get(
+                `${BC_BASE()}/v3/catalog/products?include=images,custom_url&limit=250&page=${page}&is_visible=true`,
                 { headers: BC_HEADERS() }
             );
-            products = (allRes.data.data || []).filter(p =>
-                p.custom_url && p.custom_url.url && p.custom_url.url.replace(/\//g, '') === slug.replace(/\//g, '')
+
+            const { data, meta } = pageRes.data;
+            if (!data || data.length === 0) break;
+
+            found = data.find(p =>
+                p.custom_url && p.custom_url.url &&
+                p.custom_url.url.replace(/\//g, '').toLowerCase() === normalizedSlug
             );
+
+            if (found) break;
+
+            const totalPages = meta && meta.pagination && meta.pagination.total_pages;
+            if (!totalPages || page >= totalPages) break;
+            page++;
         }
 
-        if (!products || products.length === 0) {
+        if (!found) {
             return res.json({ ok: false, error: 'Product not found' });
         }
 
-        const p = products[0];
-        const primaryImage = (p.images || []).find(img => img.is_thumbnail) || (p.images || [])[0];
-        const imageUrl = primaryImage ? primaryImage.url_standard : null;
+        const primaryImage = (found.images || []).find(img => img.is_thumbnail) || (found.images || [])[0];
 
         return res.json({
             ok: true,
             product: {
-                id:        p.id,
-                name:      p.name,
-                price:     p.price,
-                image_url: imageUrl,
+                id:        found.id,
+                name:      found.name,
+                price:     found.price,
+                image_url: primaryImage ? primaryImage.url_standard : null,
                 category:  null,
             },
         });
