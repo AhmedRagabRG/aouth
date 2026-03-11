@@ -33,7 +33,7 @@ router.get('/product', async (req, res) => {
 
         while (!found) {
             const pageRes = await axios.get(
-                `${BC_BASE()}/v3/catalog/products?include=images,custom_url&limit=250&page=${page}&is_visible=true`,
+                `${BC_BASE()}/v3/catalog/products?include=images&limit=250&page=${page}&is_visible=true`,
                 { headers: BC_HEADERS() }
             );
 
