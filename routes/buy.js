@@ -201,31 +201,56 @@ async function saveBuyOrder(order) {
         console.warn('[Buy] Customer find/create failed, using guest order:', err.message);
     }
 
-    // Fetch confirmed product price + default variant_id from BC
+    // Fetch confirmed product price + variant/option info from BC
     let productName = order.product_name || order.product_slug;
     let productPrice = parseFloat(order.product_price) || 0;
-    let variantId = null;
-    let hasOptions = false;
+    let productOptions = []; // v2 option values to include in order line
     if (order.product_id) {
         try {
+            // Fetch base product info
             const pRes = await axios.get(
-                `${BC_BASE()}/v3/catalog/products/${order.product_id}?include=variants,options`,
+                `${BC_BASE()}/v3/catalog/products/${order.product_id}`,
                 { headers: BC_HEADERS() }
             );
             const p = pRes.data.data;
             productPrice = p.price || productPrice;
             productName  = p.name  || productName;
-            hasOptions   = p.options && p.options.length > 0;
-            if (p.variants && p.variants.length > 0) {
-                variantId = p.variants[0].id;
-            }
         } catch (err) {
-            console.warn('[Buy] Could not fetch product/variant:', err.message);
+            console.warn('[Buy] Could not fetch product:', err.message);
+        }
+
+        // Fetch v2 options and pick the first value for each required option
+        try {
+            const optsRes = await axios.get(
+                `${BC_BASE()}/v2/products/${order.product_id}/options`,
+                { headers: BC_HEADERS() }
+            );
+            const opts = optsRes.data || [];
+            for (const opt of opts) {
+                // Fetch values for this option
+                const valsRes = await axios.get(
+                    `${BC_BASE()}/v2/products/${order.product_id}/options/${opt.id}/values`,
+                    { headers: BC_HEADERS() }
+                );
+                const values = valsRes.data || [];
+                if (values.length > 0) {
+                    productOptions.push({
+                        id:       opt.id,
+                        value:    String(values[0].id),
+                    });
+                }
+            }
+            console.log('[Buy] product options:', JSON.stringify(productOptions));
+        } catch (err) {
+            console.warn('[Buy] Could not fetch product options:', err.message);
         }
     }
 
-    const productLine = { product_id: parseInt(order.product_id, 10), quantity: 1 };
-    if (variantId && hasOptions) productLine.variant_id = variantId;
+    const productLine = {
+        product_id: parseInt(order.product_id, 10),
+        quantity:   1,
+    };
+    if (productOptions.length > 0) productLine.product_options = productOptions;
     console.log('[Buy] product line:', JSON.stringify(productLine));
 
     const orderPayload = {
