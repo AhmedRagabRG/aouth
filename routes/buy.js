@@ -226,23 +226,23 @@ async function saveBuyOrder(order) {
                 { headers: BC_HEADERS() }
             );
             const opts = optsRes.data || [];
+            console.log('[Buy] v2 options raw:', JSON.stringify(opts));
             for (const opt of opts) {
-                // Fetch values for this option
-                const valsRes = await axios.get(
-                    `${BC_BASE()}/v2/products/${order.product_id}/options/${opt.id}/values`,
-                    { headers: BC_HEADERS() }
-                );
-                const values = valsRes.data || [];
+                // v2 options already include their values in the response
+                const values = opt.option && opt.option.option_values
+                    ? opt.option.option_values
+                    : (opt.values || opt.option_values || []);
+                console.log(`[Buy] option ${opt.id} values:`, JSON.stringify(values));
                 if (values.length > 0) {
                     productOptions.push({
-                        id:       opt.id,
-                        value:    String(values[0].id),
+                        id:    opt.id,
+                        value: String(values[0].id),
                     });
                 }
             }
-            console.log('[Buy] product options:', JSON.stringify(productOptions));
+            console.log('[Buy] product options to send:', JSON.stringify(productOptions));
         } catch (err) {
-            console.warn('[Buy] Could not fetch product options:', err.message);
+            console.warn('[Buy] Could not fetch product options:', err.response?.data || err.message);
         }
     }
 
