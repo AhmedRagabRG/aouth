@@ -80,10 +80,12 @@ router.post('/order', async (req, res) => {
         product_id,
         product_slug,
         product_name,
+        product_price,
         name,
         phone,
         latitude,
         longitude,
+        manual_location,
         building,
         floor,
         apartment,
@@ -107,8 +109,9 @@ router.post('/order', async (req, res) => {
     if (!product_slug)  missing.push('product_slug');
     if (!name)          missing.push('name');
     if (!phone)         missing.push('phone');
-    if (!latitude)      missing.push('latitude');
-    if (!longitude)     missing.push('longitude');
+    // Location is valid if map coords provided OR manual text written
+    const locationProvided = (latitude && longitude) || (manual_location && manual_location.trim());
+    if (!locationProvided) missing.push('location (map pin or written address)');
     if (!building)      missing.push('building');
     if (floor === undefined || floor === null || String(floor).trim() === '') missing.push('floor');
     if (!apartment)     missing.push('apartment');
@@ -123,10 +126,12 @@ router.post('/order', async (req, res) => {
             product_id,
             product_slug,
             product_name,
+            product_price,
             name,
             phone,
             latitude,
             longitude,
+            manual_location,
             building,
             floor,
             apartment,
@@ -149,7 +154,10 @@ async function saveBuyOrder(order) {
     const [firstName, ...rest] = order.name.trim().split(' ');
     const lastName = rest.join(' ') || '-';
     const safePhone = order.phone.replace(/[^0-9]/g, '');
-    const mapsUrl = `https://www.google.com/maps?q=${order.latitude},${order.longitude}`;
+    const mapsUrl = latitude && longitude ? `https://www.google.com/maps?q=${order.latitude},${order.longitude}` : null;
+    const locationNote = mapsUrl
+        ? `GPS: ${order.latitude}, ${order.longitude} — Maps: ${mapsUrl}`
+        : `Written location: ${order.manual_location}`;
 
     // Find or create customer by phone
     let customerId = 0; // 0 = guest order in BC
@@ -202,7 +210,7 @@ async function saveBuyOrder(order) {
         first_name:        firstName,
         last_name:         lastName,
         street_1:          `Building ${order.building}, Floor ${order.floor}, Apt ${order.apartment}`,
-        street_2:          mapsUrl,
+        street_2:          mapsUrl || order.manual_location || '',
         city:              'Baghdad',
         state:             'Baghdad',
         zip:               '10001',
@@ -224,7 +232,7 @@ async function saveBuyOrder(order) {
                 quantity:   1,
             },
         ],
-        staff_notes: `GPS: ${order.latitude}, ${order.longitude} — Maps: ${mapsUrl}`,
+        staff_notes: locationNote + (order.manual_location && mapsUrl ? ` | Written: ${order.manual_location}` : ''),
         customer_message: `Name: ${order.name} | Phone: ${order.phone} | Building: ${order.building} | Floor: ${order.floor} | Apt: ${order.apartment}`,
         status_id: 1, // Pending
     };
