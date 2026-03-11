@@ -154,7 +154,7 @@ async function saveBuyOrder(order) {
     const [firstName, ...rest] = order.name.trim().split(' ');
     const lastName = rest.join(' ') || '-';
     const safePhone = order.phone.replace(/[^0-9]/g, '');
-    const mapsUrl = latitude && longitude ? `https://www.google.com/maps?q=${order.latitude},${order.longitude}` : null;
+    const mapsUrl = order.latitude && order.longitude ? `https://www.google.com/maps?q=${order.latitude},${order.longitude}` : null;
     const locationNote = mapsUrl
         ? `GPS: ${order.latitude}, ${order.longitude} — Maps: ${mapsUrl}`
         : `Written location: ${order.manual_location}`;
