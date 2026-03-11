@@ -148,19 +148,19 @@ router.post('/order', async (req, res) => {
 
 /**
  * Create a real BigCommerce order via v2 Orders API.
- * Finds or creates a guest customer, then posts the order.
  */
 async function saveBuyOrder(order) {
     const [firstName, ...rest] = order.name.trim().split(' ');
     const lastName = rest.join(' ') || '-';
     const safePhone = order.phone.replace(/[^0-9]/g, '');
-    const mapsUrl = order.latitude && order.longitude ? `https://www.google.com/maps?q=${order.latitude},${order.longitude}` : null;
-    const locationNote = mapsUrl
-        ? `GPS: ${order.latitude}, ${order.longitude} — Maps: ${mapsUrl}`
-        : `Written location: ${order.manual_location}`;
+    const placeholderEmail = `order-${safePhone}@buy.mozher.com`;
 
-    // Find or create customer by phone
-    let customerId = 0; // 0 = guest order in BC
+    // Build street lines from the address fields
+    const street1 = `Building ${order.building}, Floor ${order.floor}, Apt ${order.apartment}`;
+    const street2 = order.manual_location || '';
+
+    // Find or create BC customer by phone
+    let customerId = 0;
     try {
         const searchRes = await axios.get(
             `${BC_BASE()}/v3/customers?phone:in=${encodeURIComponent(order.phone)}`,
@@ -170,8 +170,6 @@ async function saveBuyOrder(order) {
         if (existing && existing.length > 0) {
             customerId = existing[0].id;
         } else {
-            // Create a new customer
-            const placeholderEmail = `order-${safePhone}-${Date.now()}@buy.mozher.com`;
             const created = await axios.post(
                 `${BC_BASE()}/v3/customers`,
                 [{
@@ -190,9 +188,9 @@ async function saveBuyOrder(order) {
         console.warn('[Buy] Customer find/create failed, using guest order:', err.message);
     }
 
-    // Fetch product price from BC to ensure accuracy
+    // Fetch confirmed product price from BC
+    let productName = order.product_name || order.product_slug;
     let productPrice = parseFloat(order.product_price) || 0;
-    let productName  = order.product_name || order.product_slug;
     if (order.product_id) {
         try {
             const pRes = await axios.get(
@@ -206,35 +204,28 @@ async function saveBuyOrder(order) {
         }
     }
 
-    const addressPayload = {
-        first_name:        firstName,
-        last_name:         lastName,
-        street_1:          `Building ${order.building}, Floor ${order.floor}, Apt ${order.apartment}`,
-        street_2:          mapsUrl || order.manual_location || '',
-        city:              'Baghdad',
-        state:             'Baghdad',
-        zip:               '10001',
-        country:           'Iraq',
-        country_iso2:      'IQ',
-        phone:             order.phone,
-        email:             customerId ? undefined : `order-${safePhone}@buy.mozher.com`,
-    };
-
-    // Remove undefined keys
-    Object.keys(addressPayload).forEach(k => addressPayload[k] === undefined && delete addressPayload[k]);
-
     const orderPayload = {
-        customer_id:      customerId,
-        billing_address:  addressPayload,
-        products: [
-            {
-                product_id: parseInt(order.product_id, 10),
-                quantity:   1,
-            },
-        ],
-        staff_notes: locationNote + (order.manual_location && mapsUrl ? ` | Written: ${order.manual_location}` : ''),
-        customer_message: `Name: ${order.name} | Phone: ${order.phone} | Building: ${order.building} | Floor: ${order.floor} | Apt: ${order.apartment}`,
-        status_id: 1, // Pending
+        customer_id: customerId,
+        billing_address: {
+            first_name:        firstName,
+            last_name:         lastName,
+            street_1:          street1,
+            street_2:          street2,
+            city:              'Baghdad',
+            state:             'Baghdad',
+            zip:               '10001',
+            country:           'Iraq',
+            country_iso2:      'IQ',
+            phone:             order.phone,
+            email:             placeholderEmail,
+        },
+        products: [{
+            product_id: parseInt(order.product_id, 10),
+            quantity:   1,
+        }],
+        staff_notes:      `Building: ${order.building} | Floor: ${order.floor} | Apt: ${order.apartment}${street2 ? ' | Location: ' + street2 : ''}`,
+        customer_message: `Name: ${order.name} | Phone: ${order.phone}`,
+        status_id: 1,
     };
 
     const orderRes = await axios.post(
@@ -244,7 +235,7 @@ async function saveBuyOrder(order) {
     );
 
     const bcOrderId = orderRes.data.id;
-    console.log(`[Buy] BC order created: id=${bcOrderId} for product "${productName}" — customer: ${order.name}`);
+    console.log(`[Buy] BC order created: id=${bcOrderId} for "${productName}" — ${order.name}`);
     return bcOrderId;
 }
 
