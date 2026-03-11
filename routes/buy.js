@@ -74,6 +74,19 @@ router.get('/product', async (req, res) => {
     }
 });
 
+// GET /buy/debug-product/:id — temporary endpoint to inspect product variants
+router.get('/debug-product/:id', async (req, res) => {
+    try {
+        const pRes = await axios.get(
+            `${BC_BASE()}/v3/catalog/products/${req.params.id}?include=variants,options`,
+            { headers: BC_HEADERS() }
+        );
+        return res.json(pRes.data);
+    } catch (err) {
+        return res.status(500).json({ error: err.response?.data || err.message });
+    }
+});
+
 // POST /buy/order — receive a product buy form submission
 router.post('/order', async (req, res) => {
     const {
