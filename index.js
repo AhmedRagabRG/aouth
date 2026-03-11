@@ -5,6 +5,7 @@ const facebookRouter  = require('./routes/facebook');
 const instagramRouter = require('./routes/instagram');
 const locationRouter  = require('./routes/location');
 const webauthnRouter  = require('./routes/webauthn');
+const buyRouter       = require('./routes/buy');
 
 const app = express();
 const PORT = process.env.PORT || 3030;
@@ -21,6 +22,7 @@ app.use('/oauth/facebook',  facebookRouter);
 app.use('/oauth/instagram', instagramRouter);
 app.use('/location',        locationRouter);
 app.use('/webauthn',       webauthnRouter);
+app.use('/buy',            buyRouter);
 
 // 404 fallback
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
