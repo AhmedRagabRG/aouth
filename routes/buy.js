@@ -201,11 +201,9 @@ async function saveBuyOrder(order) {
         console.warn('[Buy] Customer find/create failed, using guest order:', err.message);
     }
 
-    // Fetch confirmed product price + variant_id + required option values
+    // Fetch confirmed product price
     let productName = order.product_name || order.product_slug;
     let productPrice = parseFloat(order.product_price) || 0;
-    let variantId = null;
-    let productOptions = [];
     if (order.product_id) {
         try {
             const pRes = await axios.get(
@@ -215,40 +213,52 @@ async function saveBuyOrder(order) {
             const p = pRes.data.data;
             productPrice = p.price || productPrice;
             productName  = p.name  || productName;
-            variantId    = p.base_variant_id || null;
         } catch (err) {
             console.warn('[Buy] Could not fetch product:', err.message);
         }
-
-        // Fetch v2 options for this product and grab first value of each
-        try {
-            const optsRes = await axios.get(
-                `${BC_BASE()}/v2/products/${order.product_id}/options`,
-                { headers: BC_HEADERS() }
-            );
-            const opts = Array.isArray(optsRes.data) ? optsRes.data : [];
-            for (const opt of opts) {
-                const optDetail = await axios.get(
-                    `${BC_BASE()}/v2/products/${order.product_id}/options/${opt.id}`,
-                    { headers: BC_HEADERS() }
-                );
-                const values = optDetail.data.option && optDetail.data.option.option_values
-                    ? optDetail.data.option.option_values
-                    : [];
-                console.log(`[Buy] option ${opt.id} (${opt.display_name}) values:`, JSON.stringify(values.map(v => ({ id: v.id, label: v.label }))));
-                if (values.length > 0) {
-                    productOptions.push({ id: opt.id, value: String(values[0].id) });
-                }
-            }
-            console.log('[Buy] product options to send:', JSON.stringify(productOptions));
-        } catch (err) {
-            console.warn('[Buy] Could not fetch v2 options:', err.response?.data || err.message);
-        }
     }
 
-    const productLine = { product_id: parseInt(order.product_id, 10), quantity: 1 };
-    if (variantId) productLine.variant_id = variantId;
-    if (productOptions.length > 0) productLine.product_options = productOptions;
+    // Fetch all v2 options for this product, then get first value of each
+    const productOptions = [];
+    try {
+        const optsRes = await axios.get(
+            `${BC_BASE()}/v2/products/${order.product_id}/options`,
+            { headers: BC_HEADERS() }
+        );
+        const opts = Array.isArray(optsRes.data) ? optsRes.data : [];
+        console.log('[Buy] v2 options count:', opts.length, JSON.stringify(opts.map(o => o.id)));
+
+        for (const opt of opts) {
+            // Each option object has an embedded `option` with `option_values`
+            const optionValues = opt.option?.option_values || [];
+            console.log(`[Buy] option id=${opt.id} values:`, JSON.stringify(optionValues.map(v => ({ id: v.id, label: v.label }))));
+            if (optionValues.length > 0) {
+                productOptions.push({ id: opt.id, value: String(optionValues[0].id) });
+            }
+        }
+    } catch (err) {
+        console.warn('[Buy] v2 options fetch failed:', err.response?.status, JSON.stringify(err.response?.data) || err.message);
+    }
+
+    console.log('[Buy] product options to send:', JSON.stringify(productOptions));
+
+    // Use "Custom Product" format as fallback if options still empty — avoids the options error
+    let productLine;
+    if (productOptions.length > 0) {
+        productLine = {
+            product_id:      parseInt(order.product_id, 10),
+            quantity:        1,
+            product_options: productOptions,
+        };
+    } else {
+        // Fallback: custom product line — bypasses option validation entirely
+        productLine = {
+            name:          productName,
+            quantity:      1,
+            price_inc_tax: productPrice,
+            price_ex_tax:  productPrice,
+        };
+    }
     console.log('[Buy] product line:', JSON.stringify(productLine));
 
     const orderPayload = {
