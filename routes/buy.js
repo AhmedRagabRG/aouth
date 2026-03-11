@@ -25,22 +25,33 @@ router.get('/product', async (req, res) => {
     if (!slug) return res.status(400).json({ ok: false, error: 'Missing slug' });
 
     try {
-        // Search BC catalog by custom_url (slug)
+        // BC v3 catalog search by custom_url — try exact match with leading/trailing slash
+        const customUrl = '/' + slug + '/';
         const searchRes = await axios.get(
-            `${BC_BASE()}/v3/catalog/products?custom_url=%2F${encodeURIComponent(slug)}%2F&include=images,custom_fields&limit=1`,
+            `${BC_BASE()}/v3/catalog/products?url=${encodeURIComponent(customUrl)}&include=images&limit=1`,
             { headers: BC_HEADERS() }
         );
 
-        const products = searchRes.data.data;
+        let products = searchRes.data.data;
+
+        // Fallback: search all products and match custom_url manually (BC filter can be unreliable)
+        if (!products || products.length === 0) {
+            const allRes = await axios.get(
+                `${BC_BASE()}/v3/catalog/products?include=images&limit=250&is_visible=true`,
+                { headers: BC_HEADERS() }
+            );
+            products = (allRes.data.data || []).filter(p =>
+                p.custom_url && p.custom_url.url && p.custom_url.url.replace(/\//g, '') === slug.replace(/\//g, '')
+            );
+        }
+
         if (!products || products.length === 0) {
             return res.json({ ok: false, error: 'Product not found' });
         }
 
         const p = products[0];
-        const primaryImage = p.images && p.images.find(img => img.is_thumbnail);
-        const imageUrl = primaryImage
-            ? primaryImage.url_standard
-            : (p.images && p.images[0] ? p.images[0].url_standard : null);
+        const primaryImage = (p.images || []).find(img => img.is_thumbnail) || (p.images || [])[0];
+        const imageUrl = primaryImage ? primaryImage.url_standard : null;
 
         return res.json({
             ok: true,
@@ -49,11 +60,11 @@ router.get('/product', async (req, res) => {
                 name:      p.name,
                 price:     p.price,
                 image_url: imageUrl,
-                category:  null, // categories require separate call; omit for speed
+                category:  null,
             },
         });
     } catch (err) {
-        console.error('[Buy] GET /product error:', err.message);
+        console.error('[Buy] GET /product error:', err.response?.data || err.message);
         return res.status(500).json({ ok: false, error: 'Failed to load product' });
     }
 });
