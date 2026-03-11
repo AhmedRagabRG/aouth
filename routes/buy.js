@@ -219,20 +219,16 @@ async function saveBuyOrder(order) {
             console.warn('[Buy] Could not fetch product:', err.message);
         }
 
-        // Fetch v2 options and pick the first value for each required option
+        // Fetch option values using v3 options endpoint
         try {
             const optsRes = await axios.get(
-                `${BC_BASE()}/v2/products/${order.product_id}/options`,
+                `${BC_BASE()}/v3/catalog/products/${order.product_id}/options`,
                 { headers: BC_HEADERS() }
             );
-            const opts = optsRes.data || [];
-            console.log('[Buy] v2 options raw:', JSON.stringify(opts));
+            const opts = optsRes.data.data || [];
+            console.log('[Buy] v3 options:', JSON.stringify(opts.map(o => ({ id: o.id, display_name: o.display_name, values: o.option_values }))));
             for (const opt of opts) {
-                // v2 options already include their values in the response
-                const values = opt.option && opt.option.option_values
-                    ? opt.option.option_values
-                    : (opt.values || opt.option_values || []);
-                console.log(`[Buy] option ${opt.id} values:`, JSON.stringify(values));
+                const values = opt.option_values || [];
                 if (values.length > 0) {
                     productOptions.push({
                         id:    opt.id,
